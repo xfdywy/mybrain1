@@ -1,0 +1,146 @@
+#########头文件####
+setwd("../data")
+getwd()
+library(R.matlab)
+library(corrplot)
+library(ggplot2)
+library(reshape2)
+
+########从mat文件中调入数据#######
+ncor_mat<-readMat("ncorr.mat")
+names(ncor_mat)
+ncor<-ncor_mat$ncorr
+dim(ncor)
+
+
+pcor_mat<-readMat("pcorr.mat")
+names(pcor_mat)
+pcor<-pcor_mat$pcorr
+dim(pcor)
+
+###########做z变换#########
+ncorz <- 0.5*log((1+ ncor)/(1-ncor)) 
+pcorz <- 0.5*log((1+ pcor)/(1-pcor)) 
+qqnorm(ncorz[a<-sample(90,1),b<-sample(90,1),])
+qqline(ncorz[a,b,])                              ##检验分布的正态性
+shapiro.test(pcorz[a,b,])
+######画相关系数图到pdf中####
+
+pdf("nresult.pdf")
+for(i in 1:ncor_mat$people){
+corrplot(ncor[,,i])}
+dev.off()
+
+
+pdf("presult.pdf")
+for(i in 1:pcor_mat$people){
+  corrplot(pcor[,,i])}
+dev.off()
+
+#####画相关系数图到png中####
+for(i in 1:pcor_mat$people){
+  name<-paste('./pplot/',i,'myp.png')
+  png(name)
+  corrplot(pcor[,,i])
+  dev.off()}
+
+for(i in 1:2){
+    name<-paste('./nplot/',i,'myn.png')
+  png(name)
+  corrplot(pcor[,,i])
+  dev.off()}
+
+############做相关性分析########
+# list1<-matrix(0,nrow=100,ncol=90)
+# for (i in 1:100){
+#   list1[i,which(abs(ncor[1,,i])>0.6)]<-1 
+# }
+# sumlist<-(apply(list1,2,sum))
+# sumlist
+#########画箱线图#####
+for (i in 2:90){
+print(i)
+totest<-list(a<-ncorz[1,i,],b<-pcorz[1,i,])
+totest1<-melt(totest,value.name="corr")
+names(totest1)<-c("corr","group")
+summary(totest1)
+
+
+name<-paste('./nplot1/',i,'box.png')
+png(name)
+p<-ggplot(totest1)
+q1<-geom_boxplot(aes(x=as.factor(group),y=corr,
+                     colour=as.factor(group)),
+                 notch=T,outlier.colour="red")
+q2<-geom_point(aes(x=as.factor(group),y=corr))
+q3<-ggtitle(name)
+q4<-ylim(-1.5,1.5)
+print(p+q1+q2+q3+q4)
+dev.off()
+}
+
+#####做检验#####
+pvalue_w<-matrix(NA,nrow=90,ncol=90)
+pvalue_t<-matrix(NA,nrow=90,ncol=90)
+for(j in 1:dim(ncorz)[1]){
+  for (i in 1:(dim(ncorz)[2])){
+    if(i==j)
+      pvalue_t[j,i] <- -1
+    else{
+    totest<-list(a<-ncorz[j,i,],b<-pcorz[j,i,])
+    
+    print(i)
+    tresult<-  t.test(x=totest[[1]],totest[[2]],var.equal=F)
+    print(i)
+    #wresult<-wilcox.test(totest[[1]],totest[[2]],paired=F,exact=T)
+    #  pvalue_w[i,1] <- wresult$p.value
+    pvalue_t[j,i] <- tresult$p.value
+        }
+  }
+}
+pvalue_t->pvalue_result
+pvalue_t[pvalue_t>10^-6]<-1
+pvalue_t <- abs(pvalue_t-1)
+pvalue_t[pvalue_t>10^-6]<-1
+corrplot(pvalue_t,is.corr=F)
+number_p<-(length(which(pvalue_result<10^-6))-90)/2###通过检验的p值个数
+
+
+pvalue_result->pvalue_test
+res<-which(pvalue_test<10^-6,T)
+res<-data.frame(res)
+res<-res[res$col>res$row,]
+res
+fix(pvalue_test)
+
+
+
+
+totest<-list(a<-ncorz[15,67,],b<-pcorz[15,67,])
+totest1<-melt(totest,value.name="corr")
+names(totest1)<-c("corr","group")
+p<-ggplot(totest1)
+q1<-geom_boxplot(aes(x=as.factor(group),y=corr,
+                     colour=as.factor(group)),
+                 notch=T,outlier.colour="red")
+q2<-geom_point(aes(x=jitter(as.numeric(group),amount=0.02),y=corr))
+p+q1+q2
+
+
+###########把每个人的特征抽出来######
+  ####病人##
+df<-data.frame()
+pcor_f<-melt(pcor,varnames=c('naoqux','naoquy','people'),value.name='cor')
+head(pcor_f)
+for(i in 1:dim(res)[1]){
+    temp<-pcor_f[pcor_f$naoqux==res[i,1]&pcor_f$naoquy==res[i,2],]
+  head(temp)
+  df<-rbind(df,temp)  
+}
+pcor_f<-df
+pcor_f$naoqux<-as.factor(pcor_f$naoqux)
+pcor_f$naoquy<-as.factor(pcor_f$naoquy)
+pcor_f<-dcast(pcor_f,people ~ naoqux + naoquy,value.var='cor')
+pcor_f$label<-0
+  ####正常人###
+
